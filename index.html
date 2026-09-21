@@ -30,7 +30,6 @@
             width: 100%;
         }
 
-        /* Top Header Area */
         .header {
             display: flex;
             align-items: center;
@@ -68,6 +67,220 @@
         .client-title {
             font-size: 24px;
             font-weight: bold;
+            margin: 0 0 4px 0;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .stepper {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 30px;
+            overflow-x: auto;
+            padding-bottom: 10px;
+        }
+
+        .step-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            width: 100px;
+            min-width: 80px;
+        }
+
+        .step-number {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background-color: #2c2c35;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .step-item.active .step-number {
+            background-color: var(--accent-blue);
+            color: #fff;
+        }
+
+        .step-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            line-height: 1.2;
+        }
+
+        .step-item.active .step-label {
+            color: var(--text-primary);
+            font-weight: bold;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        .stage-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background-color: var(--accent-pink);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 16px;
+        }
+
+        .stage-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 0 0 8px 0;
+        }
+
+        .stage-notes {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .subtasks-box {
+            background-color: #17171a;
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .subtasks-header {
+            font-size: 13px;
+            font-weight: bold;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .error-box {
+            background-color: #2a1517;
+            border: 1px solid #ff2d55;
+            color: #ff8095;
+            padding: 20px;
+            border-radius: 12px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <div class="progress-circle" id="progressCircle">
+            <span class="progress-text" id="progressPercent">0%</span>
+        </div>
+        <div>
+            <h1 class="client-title" id="clientName">Client Portal</h1>
+            <p class="subtitle" id="stageSubtitle">Stage -- of --</p>
+        </div>
+    </div>
+
+    <div class="stepper" id="stepperContainer"></div>
+
+    <div class="card" id="mainCard">
+        <div class="stage-badge">
+            <span>📄</span> <span id="currentStageBadge">Stage --</span>
+        </div>
+        <h2 class="stage-title" id="stageTitle">Loading...</h2>
+        <div class="stage-notes" id="stageNotes"></div>
+
+        <div class="subtasks-box">
+            <div class="subtasks-header">Sub-Tasks & Deliverables</div>
+            <div id="subtasksList" style="color: var(--text-secondary); font-size: 13px;">
+                No sub-tasks yet for this stage.
+            </div>
+        </div>
+    </div>
+
+    <div class="error-box" id="errorBox">
+        <h3 style="margin-top:0">Invalid Portal Link</h3>
+        <p id="errorMessage">Unable to decode event tracking payload from URL.</p>
+    </div>
+</div>
+
+<script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const encodedData = urlParams.get('data');
+
+    if (encodedData) {
+        try {
+            // Decode Base64 JSON string directly from URL parameter
+            const decodedJson = decodeURIComponent(escape(atob(encodedData)));
+            const data = JSON.parse(decodedJson);
+            renderPortal(data);
+        } catch (e) {
+            showError("Failed to parse event data from URL parameter.");
+        }
+    } else {
+        showError("No event payload provided in link. Generate a new link from your macOS app.");
+    }
+
+    function showError(msg) {
+        document.getElementById('mainCard').style.display = "none";
+        document.getElementById('errorBox').style.display = "block";
+        document.getElementById('errorMessage').innerText = msg;
+    }
+
+    function renderPortal(data) {
+        document.getElementById('clientName').innerText = data.clientName || 'Client Event';
+        
+        const percent = data.progressPercent || 0;
+        document.getElementById('progressPercent').innerText = `${percent}%`;
+        document.getElementById('progressCircle').style.setProperty('--percent', percent);
+
+        const currentStageIdx = data.currentStageIndex || 1;
+        const totalStages = data.stages ? data.stages.length : 8;
+        
+        document.getElementById('stageSubtitle').innerText = `Stage ${currentStageIdx} of ${totalStages}`;
+        
+        if (data.stages && data.stages.length > 0) {
+            const activeStage = data.stages[currentStageIdx - 1] || data.stages[0];
+            document.getElementById('currentStageBadge').innerText = `Stage ${activeStage.id} of ${totalStages}`;
+            document.getElementById('stageTitle').innerText = activeStage.name || `Stage ${activeStage.id}`;
+            document.getElementById('stageNotes').innerText = activeStage.notes || "No additional notes for this stage.";
+
+            const subtasksContainer = document.getElementById('subtasksList');
+            if (activeStage.subtasks && activeStage.subtasks.length > 0) {
+                subtasksContainer.innerHTML = activeStage.subtasks.map(item => `<div>• ${item}</div>`).join('');
+            } else {
+                subtasksContainer.innerText = "No sub-tasks yet for this stage.";
+            }
+
+            const stepperContainer = document.getElementById('stepperContainer');
+            stepperContainer.innerHTML = '';
+            
+            data.stages.forEach((stage, index) => {
+                const isActive = (index + 1) === currentStageIdx;
+                const stepHtml = `
+                    <div class="step-item ${isActive ? 'active' : ''}">
+                        <div class="step-number">${stage.id}</div>
+                        <div class="step-label">${stage.name}</div>
+                    </div>
+                `;
+                stepperContainer.innerHTML += stepHtml;
+            });
+        }
+    }
+</script>
+</body>
+</html>            font-weight: bold;
             margin: 0 0 4px 0;
         }
 
