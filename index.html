@@ -42,7 +42,7 @@
             width: 60px;
             height: 60px;
             border-radius: 50%;
-            background: conic-gradient(var(--accent-blue) calc(var(--percent) * 1%), #2c2c35 0);
+            background: conic-gradient(var(--accent-blue) calc(var(--percent, 0) * 1%), #2c2c35 0);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -84,6 +84,8 @@
             align-items: flex-start;
             margin-bottom: 30px;
             position: relative;
+            overflow-x: auto;
+            padding-bottom: 10px;
         }
 
         .step-item {
@@ -92,6 +94,7 @@
             align-items: center;
             text-align: center;
             width: 100px;
+            min-width: 80px;
             z-index: 1;
         }
 
@@ -114,7 +117,7 @@
         }
 
         .step-label {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--text-secondary);
             line-height: 1.2;
         }
@@ -170,92 +173,130 @@
             color: var(--text-secondary);
             margin-bottom: 8px;
         }
+
+        /* Status & Error UI */
+        .error-box {
+            background-color: #2a1517;
+            border: 1px solid #ff2d55;
+            color: #ff8095;
+            padding: 20px;
+            border-radius: 12px;
+            display: none;
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div class="header">
-        <div class="progress-circle" id="progressCircle" style="--percent: 0;">
+        <div class="progress-circle" id="progressCircle">
             <span class="progress-text" id="progressPercent">0%</span>
         </div>
         <div>
-            <h1 class="client-title" id="clientName">Loading Event...</h1>
-            <p class="subtitle" id="stageSubtitle">Stage -- of --</p>
+            <h1 class="client-title" id="clientName">Loading Client Portal...</h1>
+            <p class="subtitle" id="stageSubtitle">Checking event status...</p>
         </div>
     </div>
 
-    <div class="stepper" id="stepperContainer">
-        <!-- Dynamically generated 1-8 step indicators -->
-    </div>
+    <div class="stepper" id="stepperContainer"></div>
 
-    <div class="card">
+    <div class="card" id="mainCard">
         <div class="stage-badge">
-            <span>📄</span> <span id="currentStageBadge">Stage -- of --</span>
+            <span>📄</span> <span id="currentStageBadge">Stage --</span>
         </div>
-        <h2 class="stage-title" id="stageTitle">Loading...</h2>
-        <div class="stage-notes" id="stageNotes"></div>
+        <h2 class="stage-title" id="stageTitle">Loading Stage Details...</h2>
+        <div class="stage-notes" id="stageNotes">Please wait...</div>
 
         <div class="subtasks-box">
             <div class="subtasks-header">Sub-Tasks & Deliverables</div>
             <div id="subtasksList" style="color: var(--text-secondary); font-size: 13px;">
-                No sub-tasks yet for this stage.
+                Checking deliverables...
             </div>
         </div>
+    </div>
+
+    <div class="error-box" id="errorBox">
+        <h3 style="margin-top:0">Event Portal Not Found</h3>
+        <p id="errorMessage">Unable to fetch event details.</p>
     </div>
 </div>
 
 <script>
-    // Fetch JSON based on ?id= query param from URL
     const urlParams = new URLSearchParams(window.location.search);
     const eventId = urlParams.get('id');
 
-    if (eventId) {
-        fetch(`./data/${eventId}.json`)
+    if (!eventId) {
+        showError("No Event ID provided in URL parameters. Format should be: ?id=YOUR_EVENT_ID");
+    } else {
+        // Construct path dynamically based on absolute repo path
+        const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
+        const jsonUrl = `${basePath}/data/${eventId}.json`;
+
+        fetch(jsonUrl)
             .then(response => {
-                if (!response.ok) throw new Error("Event data not found");
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: Could not find data at file 'data/${eventId}.json'. Make sure your Xcode app has synced/published this event to GitHub.`);
+                }
                 return response.json();
             })
             .then(data => renderPortal(data))
             .catch(err => {
-                document.getElementById('clientName').innerText = "Event Not Found";
-                console.error("Error loading event data:", err);
+                showError(err.message);
             });
     }
 
+    function showError(msg) {
+        document.getElementById('clientName').innerText = "Event Unavailable";
+        document.getElementById('stageSubtitle').innerText = "Status: Data Link Pending";
+        document.getElementById('mainCard').style.display = "none";
+        
+        const errBox = document.getElementById('errorBox');
+        errBox.style.display = "block";
+        document.getElementById('errorMessage').innerText = msg;
+    }
+
     function renderPortal(data) {
-        document.getElementById('clientName').innerText = data.clientName;
-        document.getElementById('progressPercent').innerText = `${data.progressPercent}%`;
-        document.getElementById('progressCircle').style.setProperty('--percent', data.progressPercent);
-        document.getElementById('stageSubtitle').innerText = `Stage ${data.currentStageIndex} of ${data.stages.length}`;
+        document.getElementById('clientName').innerText = data.clientName || 'Client Event';
         
-        const activeStage = data.stages[data.currentStageIndex - 1];
-        document.getElementById('currentStageBadge').innerText = `Stage ${activeStage.id} of ${data.stages.length}`;
-        document.getElementById('stageTitle').innerText = activeStage.name;
-        document.getElementById('stageNotes').innerText = activeStage.notes || "No notes for this stage.";
+        const percent = data.progressPercent || 0;
+        document.getElementById('progressPercent').innerText = `${percent}%`;
+        document.getElementById('progressCircle').style.setProperty('--percent', percent);
 
-        // Render Sub-Tasks
-        const subtasksContainer = document.getElementById('subtasksList');
-        if (activeStage.subtasks && activeStage.subtasks.length > 0) {
-            subtasksContainer.innerHTML = activeStage.subtasks.map(item => `<div>• ${item}</div>`).join('');
-        } else {
-            subtasksContainer.innerText = "No sub-tasks yet for this stage.";
+        const currentStageIdx = data.currentStageIndex || 1;
+        const totalStages = data.stages ? data.stages.length : 8;
+        
+        document.getElementById('stageSubtitle').innerText = `Stage ${currentStageIdx} of ${totalStages}`;
+        
+        if (data.stages && data.stages.length > 0) {
+            const activeStage = data.stages[currentStageIdx - 1] || data.stages[0];
+            document.getElementById('currentStageBadge').innerText = `Stage ${activeStage.id} of ${totalStages}`;
+            document.getElementById('stageTitle').innerText = activeStage.name || `Stage ${activeStage.id}`;
+            document.getElementById('stageNotes').innerText = activeStage.notes || "No additional notes for this stage.";
+
+            // Render Sub-Tasks
+            const subtasksContainer = document.getElementById('subtasksList');
+            if (activeStage.subtasks && activeStage.subtasks.length > 0) {
+                subtasksContainer.innerHTML = activeStage.subtasks.map(item => `<div>• ${item}</div>`).join('');
+            } else {
+                subtasksContainer.innerText = "No sub-tasks yet for this stage.";
+            }
+
+            // Render Stepper Bar
+            const stepperContainer = document.getElementById('stepperContainer');
+            stepperContainer.innerHTML = '';
+            
+            data.stages.forEach((stage, index) => {
+                const isActive = (index + 1) === currentStageIdx;
+                const stepHtml = `
+                    <div class="step-item ${isActive ? 'active' : ''}">
+                        <div class="step-number">${stage.id}</div>
+                        <div class="step-label">${stage.name}</div>
+                    </div>
+                `;
+                stepperContainer.innerHTML += stepHtml;
+            });
         }
-
-        // Render Stepper Bar (1 to N)
-        const stepperContainer = document.getElementById('stepperContainer');
-        stepperContainer.innerHTML = '';
-        
-        data.stages.forEach((stage, index) => {
-            const isActive = (index + 1) === data.currentStageIndex;
-            const stepHtml = `
-                <div class="step-item ${isActive ? 'active' : ''}">
-                    <div class="step-number">${stage.id}</div>
-                    <div class="step-label">${stage.name}</div>
-                </div>
-            `;
-            stepperContainer.innerHTML += stepHtml;
-        });
     }
 </script>
 </body>
