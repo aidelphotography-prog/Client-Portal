@@ -197,24 +197,22 @@
         setInterval(() => fetchLiveEventData(eventId), 3000);
     }
 
-    function fetchLiveEventData(id) {
-        const safeId = id.toLowerCase().trim();
-        const timestamp = Date.now();
-        const rawUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/data/${safeId}.json?t=${timestamp}`;
+function fetchLiveEventData(id) {
+    const safeId = id.toLowerCase().trim();
+    // Fetching directly from GitHub REST API bypasses CDN edge cache completely!
+    const apiURL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/data/${safeId}.json?t=${Date.now()}`;
 
-        fetch(rawUrl, { cache: "no-store" })
-            .then(res => {
-                if (!res.ok) {
-                    throw new Error(`HTTP ${res.status}: File 'data/${safeId}.json' not found on GitHub repository.`);
-                }
-                return res.json();
-            })
-            .then(data => renderPortal(data))
-            .catch(err => {
-                console.error("Portal Fetch Error:", err);
-                showError("Sync Pending", `Unable to load data for ID '${safeId}'. Ensure the file exists at 'data/${safeId}.json' on GitHub.`);
-            });
-    }
+    fetch(apiURL, {
+        headers: { 'Accept': 'application/vnd.github.v3.raw' },
+        cache: 'no-store'
+    })
+    .then(res => {
+        if (!res.ok) throw new Error("File not found on GitHub");
+        return res.json();
+    })
+    .then(data => renderPortal(data))
+    .catch(err => console.warn("Live poll waiting...", err));
+}
 
     function renderPortal(data) {
         document.getElementById('clientName').innerText = data.clientName || data.name || "Client Event";
