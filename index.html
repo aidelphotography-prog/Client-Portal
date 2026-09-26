@@ -82,6 +82,8 @@
             align-items: flex-start;
             margin-bottom: 30px;
             position: relative;
+            overflow-x: auto;
+            padding-bottom: 10px;
         }
 
         .step-item {
@@ -89,7 +91,7 @@
             flex-direction: column;
             align-items: center;
             text-align: center;
-            width: 100px;
+            min-width: 90px;
             z-index: 1;
         }
 
@@ -106,13 +108,19 @@
             margin-bottom: 8px;
         }
 
-        .step-item.active .step-number {
-            background-color: var(--accent-blue);
+        .step-item.completed .step-number {
+            background-color: #007aff;
             color: #fff;
         }
 
+        .step-item.active .step-number {
+            background-color: #007aff;
+            color: #fff;
+            box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.4);
+        }
+
         .step-label {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--text-secondary);
             line-height: 1.2;
         }
@@ -165,7 +173,33 @@
             font-size: 13px;
             font-weight: bold;
             color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .subtask-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
             margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .subtask-checkbox {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            background-color: #2c2c35;
+            border: 1px solid var(--card-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+        }
+
+        .subtask-item.done .subtask-checkbox {
+            background-color: var(--accent-blue);
+            border-color: var(--accent-blue);
         }
 
         .error-card {
@@ -218,10 +252,10 @@
     function initPortal() {
         if (eventId) {
             fetchLiveEventData(eventId);
-            setInterval(() => fetchLiveEventData(eventId), 5000);
+            setInterval(() => fetchLiveEventData(eventId), 3000);
             return;
         }
-        showError("Invalid Link", "No Event ID found in URL.");
+        showError("Invalid Link", "No Event ID specified in the URL.");
     }
 
     function fetchLiveEventData(id) {
@@ -233,42 +267,57 @@
                 return res.json();
             })
             .then(data => renderPortal(data))
-            .catch(err => {
-                console.warn(err);
-                showError("Sync Pending", `Event data for '${id}' is syncing or does not exist yet.`);
-            });
+            .catch(err => console.warn("Live poll waiting...", err));
     }
 
     function renderPortal(data) {
         document.getElementById('clientName').innerText = data.clientName || data.name || "Client Event";
-        const percent = data.progressPercent ?? data.progress ?? 0;
+        
+        const stages = data.stages || [];
+        const currentIdx = data.currentStageIndex || 1;
+        const totalStages = stages.length || 8;
+
+        // Calculate progress percentage accurately
+        const percent = Math.round((currentIdx / totalStages) * 100);
         document.getElementById('progressPercent').innerText = `${percent}%`;
         document.getElementById('progressCircle').style.setProperty('--percent', percent);
 
-        const stages = data.stages || [];
-        const currentIdx = data.currentStageIndex || 1;
-        document.getElementById('stageSubtitle').innerText = `Stage ${currentIdx} of ${stages.length}`;
+        document.getElementById('stageSubtitle').innerText = `Stage ${currentIdx} of ${totalStages}`;
 
         if (stages.length > 0) {
             const activeStage = stages[currentIdx - 1] || stages[0];
-            document.getElementById('currentStageBadge').innerText = `Stage ${activeStage.id || currentIdx} of ${stages.length}`;
+            document.getElementById('currentStageBadge').innerText = `Stage ${currentIdx} of ${totalStages}`;
             document.getElementById('stageTitle').innerText = activeStage.name || "Current Stage";
             document.getElementById('stageNotes').innerText = activeStage.notes || "No notes for this stage.";
 
+            // Render Sub-Tasks with checkboxes
             const subtasksContainer = document.getElementById('subtasksList');
             if (activeStage.subtasks && activeStage.subtasks.length > 0) {
-                subtasksContainer.innerHTML = activeStage.subtasks.map(i => `<div>• ${i}</div>`).join('');
+                subtasksContainer.innerHTML = activeStage.subtasks.map(item => {
+                    const isDone = typeof item === 'object' ? item.isCompleted : false;
+                    const taskName = typeof item === 'object' ? item.title : item;
+                    return `
+                        <div class="subtask-item ${isDone ? 'done' : ''}">
+                            <div class="subtask-checkbox">${isDone ? '✓' : ''}</div>
+                            <span>${taskName}</span>
+                        </div>
+                    `;
+                }).join('');
             } else {
-                subtasksContainer.innerText = "No sub-tasks yet for this stage.";
+                subtasksContainer.innerHTML = `<span style="color:var(--text-secondary)">No sub-tasks yet for this stage.</span>`;
             }
 
+            // Render Stepper Circles
             const stepperContainer = document.getElementById('stepperContainer');
             stepperContainer.innerHTML = '';
             stages.forEach((stage, idx) => {
-                const isActive = (idx + 1) === currentIdx;
+                const stageNum = idx + 1;
+                const isActive = stageNum === currentIdx;
+                const isCompleted = stageNum < currentIdx;
+                
                 stepperContainer.innerHTML += `
-                    <div class="step-item ${isActive ? 'active' : ''}">
-                        <div class="step-number">${stage.id || (idx + 1)}</div>
+                    <div class="step-item ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}">
+                        <div class="step-number">${isCompleted ? '✓' : stageNum}</div>
                         <div class="step-label">${stage.name}</div>
                     </div>
                 `;
