@@ -256,7 +256,6 @@
     function initPortal() {
         if (eventId) {
             fetchLiveEventData(eventId);
-            // Poll for updates every 3 seconds
             setInterval(() => fetchLiveEventData(eventId), 3000);
             return;
         }
@@ -264,24 +263,28 @@
     }
 
     function fetchLiveEventData(id) {
-        // Cache buster via unique timestamp query parameter
         const timestamp = new Date().getTime();
+        // Try exact ID first, then fallback to lowercase ID
         const rawUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/data/${id}.json?cb=${timestamp}`;
 
-        fetch(rawUrl, {
-            method: "GET",
-            headers: {
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-                "Pragma": "no-cache",
-                "Expires": "0"
-            }
-        })
-        .then(res => {
-            if (!res.ok) throw new Error("JSON file not found");
-            return res.json();
-        })
-        .then(data => renderPortal(data))
-        .catch(err => console.warn("Sync polling...", err));
+        fetch(rawUrl, { cache: "no-store" })
+            .then(res => {
+                if (!res.ok) {
+                    // Try lowercase ID fallback
+                    const lowerUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/data/${id.toLowerCase()}.json?cb=${timestamp}`;
+                    return fetch(lowerUrl, { cache: "no-store" });
+                }
+                return res;
+            })
+            .then(res => {
+                if (!res.ok) throw new Error("JSON file not found");
+                return res.json();
+            })
+            .then(data => renderPortal(data))
+            .catch(err => {
+                console.warn("Polling for event data...", err);
+                showError("Sync Pending", `Event data for '${id}' is syncing or does not exist on GitHub yet.`);
+            });
     }
 
     function renderPortal(data) {
@@ -290,15 +293,10 @@
         const stages = data.stages || [];
         const totalStages = stages.length || 8;
 
-        // Parse current stage index (1-based index)
         let currentIdx = data.currentStageIndex ?? data.currentStage ?? 1;
         if (currentIdx < 1) currentIdx = 1;
 
-        // Calculate progress percentage dynamically: (currentStage / totalStages) * 100
-        // e.g., Stage 1 of 8 = 12.5% -> rounded to 12% or 13%
         const computedPercent = Math.round((currentIdx / totalStages) * 100);
-        
-        // Prefer computed percentage from stages array to prevent stale percentage mismatches
         const displayPercent = data.progressPercent !== undefined ? data.progressPercent : computedPercent;
         
         document.getElementById('progressPercent').innerText = `${displayPercent}%`;
@@ -312,7 +310,6 @@
             document.getElementById('stageTitle').innerText = activeStage.name || "Current Stage";
             document.getElementById('stageNotes').innerText = activeStage.notes || "No notes for this stage.";
 
-            // Render Sub-Tasks
             const subtasksContainer = document.getElementById('subtasksList');
             if (activeStage.subtasks && activeStage.subtasks.length > 0) {
                 subtasksContainer.innerHTML = activeStage.subtasks.map(item => {
@@ -329,7 +326,6 @@
                 subtasksContainer.innerHTML = `<span style="color:var(--text-secondary)">No sub-tasks yet for this stage.</span>`;
             }
 
-            // Render Stepper Circles
             const stepperContainer = document.getElementById('stepperContainer');
             stepperContainer.innerHTML = '';
             stages.forEach((stage, idx) => {
@@ -355,9 +351,6 @@
             </div>
         `;
     }
-
-    initPortal();
-</script>
 
     initPortal();
 </script>
