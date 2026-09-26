@@ -15,10 +15,14 @@
             --text-secondary: #a0a0ab;
         }
 
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             background-color: var(--bg-color);
             color: var(--text-primary);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             margin: 0;
             padding: 40px 20px;
             display: flex;
@@ -109,12 +113,12 @@
         }
 
         .step-item.completed .step-number {
-            background-color: #007aff;
+            background-color: var(--accent-blue);
             color: #fff;
         }
 
         .step-item.active .step-number {
-            background-color: #007aff;
+            background-color: var(--accent-blue);
             color: #fff;
             box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.4);
         }
@@ -267,18 +271,19 @@
                 return res.json();
             })
             .then(data => renderPortal(data))
-            .catch(err => console.warn("Live poll waiting...", err));
+            .catch(err => console.warn("Polling for updates...", err));
     }
 
     function renderPortal(data) {
         document.getElementById('clientName').innerText = data.clientName || data.name || "Client Event";
         
         const stages = data.stages || [];
-        const currentIdx = data.currentStageIndex || 1;
         const totalStages = stages.length || 8;
 
-        // Calculate progress percentage accurately
-        const percent = Math.round((currentIdx / totalStages) * 100);
+        let currentIdx = data.currentStageIndex ?? data.currentStage ?? 1;
+        if (currentIdx === 0) currentIdx = 1;
+
+        const percent = data.progressPercent ?? Math.round((currentIdx / totalStages) * 100);
         document.getElementById('progressPercent').innerText = `${percent}%`;
         document.getElementById('progressCircle').style.setProperty('--percent', percent);
 
@@ -290,7 +295,6 @@
             document.getElementById('stageTitle').innerText = activeStage.name || "Current Stage";
             document.getElementById('stageNotes').innerText = activeStage.notes || "No notes for this stage.";
 
-            // Render Sub-Tasks with checkboxes
             const subtasksContainer = document.getElementById('subtasksList');
             if (activeStage.subtasks && activeStage.subtasks.length > 0) {
                 subtasksContainer.innerHTML = activeStage.subtasks.map(item => {
@@ -307,273 +311,6 @@
                 subtasksContainer.innerHTML = `<span style="color:var(--text-secondary)">No sub-tasks yet for this stage.</span>`;
             }
 
-            // Render Stepper Circles
-            const stepperContainer = document.getElementById('stepperContainer');
-            stepperContainer.innerHTML = '';
-            stages.forEach((stage, idx) => {
-                const stageNum = idx + 1;
-                const isActive = stageNum === currentIdx;
-                const isCompleted = stageNum < currentIdx;
-                
-                stepperContainer.innerHTML += `
-                    <div class="step-item ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}">
-                        <div class="step-number">${isCompleted ? '✓' : stageNum}</div>
-                        <div class="step-label">${stage.name}</div>
-                    </div>
-                `;
-            });
-        }
-    }
-
-    function showError(title, message) {
-        document.getElementById('portalContent').innerHTML = `
-            <div class="error-card">
-                <h2 style="margin-top:0">${title}</h2>
-                <p>${message}</p>
-            </div>
-        `;
-    }
-
-    initPortal();
-</script>
-</body>
-</html>            color: var(--text-secondary);
-            font-size: 14px;
-            margin: 0;
-        }
-
-        .stepper {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 30px;
-            position: relative;
-            overflow-x: auto;
-            padding-bottom: 10px;
-        }
-
-        .step-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            text-align: center;
-            min-width: 90px;
-            z-index: 1;
-        }
-
-        .step-number {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background-color: #2c2c35;
-            color: var(--text-secondary);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            margin-bottom: 8px;
-        }
-
-        .step-item.completed .step-number {
-            background-color: #007aff;
-            color: #fff;
-        }
-
-        .step-item.active .step-number {
-            background-color: #007aff;
-            color: #fff;
-            box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.4);
-        }
-
-        .step-label {
-            font-size: 11px;
-            color: var(--text-secondary);
-            line-height: 1.2;
-        }
-
-        .step-item.active .step-label {
-            color: var(--text-primary);
-            font-weight: bold;
-        }
-
-        .card {
-            background-color: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 12px;
-            padding: 24px;
-        }
-
-        .stage-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            background-color: var(--accent-pink);
-            color: white;
-            padding: 6px 12px;
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: bold;
-            margin-bottom: 16px;
-        }
-
-        .stage-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin: 0 0 8px 0;
-        }
-
-        .stage-notes {
-            color: var(--text-secondary);
-            font-size: 14px;
-            margin-bottom: 20px;
-        }
-
-        .subtasks-box {
-            background-color: #17171a;
-            border: 1px solid var(--card-border);
-            border-radius: 8px;
-            padding: 16px;
-        }
-
-        .subtasks-header {
-            font-size: 13px;
-            font-weight: bold;
-            color: var(--text-secondary);
-            margin-bottom: 12px;
-        }
-
-        .subtask-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 13px;
-            margin-bottom: 8px;
-            color: var(--text-primary);
-        }
-
-        .subtask-checkbox {
-            width: 16px;
-            height: 16px;
-            border-radius: 4px;
-            background-color: #2c2c35;
-            border: 1px solid var(--card-border);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
-        }
-
-        .subtask-item.done .subtask-checkbox {
-            background-color: var(--accent-blue);
-            border-color: var(--accent-blue);
-        }
-
-        .error-card {
-            background-color: rgba(255, 45, 85, 0.15);
-            border: 1px solid var(--accent-pink);
-            border-radius: 12px;
-            padding: 20px;
-            color: white;
-        }
-    </style>
-</head>
-<body>
-
-<div class="container" id="portalContent">
-    <div class="header">
-        <div class="progress-circle" id="progressCircle" style="--percent: 0;">
-            <span class="progress-text" id="progressPercent">0%</span>
-        </div>
-        <div>
-            <h1 class="client-title" id="clientName">Loading Event...</h1>
-            <p class="subtitle" id="stageSubtitle">Stage -- of --</p>
-        </div>
-    </div>
-
-    <div class="stepper" id="stepperContainer"></div>
-
-    <div class="card">
-        <div class="stage-badge">
-            <span>📄</span> <span id="currentStageBadge">Stage -- of --</span>
-        </div>
-        <h2 class="stage-title" id="stageTitle">Loading...</h2>
-        <div class="stage-notes" id="stageNotes"></div>
-
-        <div class="subtasks-box">
-            <div class="subtasks-header">Sub-Tasks & Deliverables</div>
-            <div id="subtasksList" style="color: var(--text-secondary); font-size: 13px;">
-                No sub-tasks yet for this stage.
-            </div>
-        </div>
-    </div>
-</div>
-
-<script>
-    const REPO_OWNER = "aidelphotography-prog";
-    const REPO_NAME = "Client-Portal";
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const eventId = urlParams.get('id');
-
-    function initPortal() {
-        if (eventId) {
-            fetchLiveEventData(eventId);
-            setInterval(() => fetchLiveEventData(eventId), 3000);
-            return;
-        }
-        showError("Invalid Link", "No Event ID specified in the URL.");
-    }
-
-    function fetchLiveEventData(id) {
-        const rawUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/data/${id}.json?t=${Date.now()}`;
-
-        fetch(rawUrl, { cache: "no-store" })
-            .then(res => {
-                if (!res.ok) throw new Error("JSON file not found");
-                return res.json();
-            })
-            .then(data => renderPortal(data))
-            .catch(err => console.warn("Live poll waiting...", err));
-    }
-
-    function renderPortal(data) {
-        document.getElementById('clientName').innerText = data.clientName || data.name || "Client Event";
-        
-        const stages = data.stages || [];
-        const currentIdx = data.currentStageIndex || 1;
-        const totalStages = stages.length || 8;
-
-        // Calculate progress percentage accurately
-        const percent = Math.round((currentIdx / totalStages) * 100);
-        document.getElementById('progressPercent').innerText = `${percent}%`;
-        document.getElementById('progressCircle').style.setProperty('--percent', percent);
-
-        document.getElementById('stageSubtitle').innerText = `Stage ${currentIdx} of ${totalStages}`;
-
-        if (stages.length > 0) {
-            const activeStage = stages[currentIdx - 1] || stages[0];
-            document.getElementById('currentStageBadge').innerText = `Stage ${currentIdx} of ${totalStages}`;
-            document.getElementById('stageTitle').innerText = activeStage.name || "Current Stage";
-            document.getElementById('stageNotes').innerText = activeStage.notes || "No notes for this stage.";
-
-            // Render Sub-Tasks with checkboxes
-            const subtasksContainer = document.getElementById('subtasksList');
-            if (activeStage.subtasks && activeStage.subtasks.length > 0) {
-                subtasksContainer.innerHTML = activeStage.subtasks.map(item => {
-                    const isDone = typeof item === 'object' ? item.isCompleted : false;
-                    const taskName = typeof item === 'object' ? item.title : item;
-                    return `
-                        <div class="subtask-item ${isDone ? 'done' : ''}">
-                            <div class="subtask-checkbox">${isDone ? '✓' : ''}</div>
-                            <span>${taskName}</span>
-                        </div>
-                    `;
-                }).join('');
-            } else {
-                subtasksContainer.innerHTML = `<span style="color:var(--text-secondary)">No sub-tasks yet for this stage.</span>`;
-            }
-
-            // Render Stepper Circles
             const stepperContainer = document.getElementById('stepperContainer');
             stepperContainer.innerHTML = '';
             stages.forEach((stage, idx) => {
