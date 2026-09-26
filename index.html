@@ -15,24 +15,19 @@
             --text-secondary: #a0a0ab;
         }
 
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         body {
             background-color: var(--bg-color);
             color: var(--text-primary);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             margin: 0;
             padding: 40px 20px;
             display: flex;
             justify-content: center;
         }
 
-        .container {
-            max-width: 900px;
-            width: 100%;
-        }
+        .container { max-width: 900px; width: 100%; }
 
         .header {
             display: flex;
@@ -61,24 +56,9 @@
             background-color: var(--bg-color);
         }
 
-        .progress-text {
-            position: relative;
-            z-index: 1;
-            font-size: 14px;
-            font-weight: bold;
-        }
-
-        .client-title {
-            font-size: 24px;
-            font-weight: bold;
-            margin: 0 0 4px 0;
-        }
-
-        .subtitle {
-            color: var(--text-secondary);
-            font-size: 14px;
-            margin: 0;
-        }
+        .progress-text { position: relative; z-index: 1; font-size: 14px; font-weight: bold; }
+        .client-title { font-size: 24px; font-weight: bold; margin: 0 0 4px 0; }
+        .subtitle { color: var(--text-secondary); font-size: 14px; margin: 0; }
 
         .stepper {
             display: flex;
@@ -112,27 +92,15 @@
             margin-bottom: 8px;
         }
 
-        .step-item.completed .step-number {
-            background-color: var(--accent-blue);
-            color: #fff;
-        }
-
+        .step-item.completed .step-number { background-color: var(--accent-blue); color: #fff; }
         .step-item.active .step-number {
             background-color: var(--accent-blue);
             color: #fff;
             box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.4);
         }
 
-        .step-label {
-            font-size: 11px;
-            color: var(--text-secondary);
-            line-height: 1.2;
-        }
-
-        .step-item.active .step-label {
-            color: var(--text-primary);
-            font-weight: bold;
-        }
+        .step-label { font-size: 11px; color: var(--text-secondary); line-height: 1.2; }
+        .step-item.active .step-label { color: var(--text-primary); font-weight: bold; }
 
         .card {
             background-color: var(--card-bg);
@@ -154,17 +122,8 @@
             margin-bottom: 16px;
         }
 
-        .stage-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin: 0 0 8px 0;
-        }
-
-        .stage-notes {
-            color: var(--text-secondary);
-            font-size: 14px;
-            margin-bottom: 20px;
-        }
+        .stage-title { font-size: 18px; font-weight: bold; margin: 0 0 8px 0; }
+        .stage-notes { color: var(--text-secondary); font-size: 14px; margin-bottom: 20px; }
 
         .subtasks-box {
             background-color: #17171a;
@@ -173,38 +132,13 @@
             padding: 16px;
         }
 
-        .subtasks-header {
-            font-size: 13px;
-            font-weight: bold;
-            color: var(--text-secondary);
-            margin-bottom: 12px;
-        }
-
-        .subtask-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 13px;
-            margin-bottom: 8px;
-            color: var(--text-primary);
-        }
-
+        .subtasks-header { font-size: 13px; font-weight: bold; color: var(--text-secondary); margin-bottom: 12px; }
+        .subtask-item { display: flex; align-items: center; gap: 10px; font-size: 13px; margin-bottom: 8px; color: var(--text-primary); }
         .subtask-checkbox {
-            width: 16px;
-            height: 16px;
-            border-radius: 4px;
-            background-color: #2c2c35;
-            border: 1px solid var(--card-border);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
+            width: 16px; height: 16px; border-radius: 4px; background-color: #2c2c35;
+            border: 1px solid var(--card-border); display: flex; align-items: center; justify-content: center; font-size: 11px;
         }
-
-        .subtask-item.done .subtask-checkbox {
-            background-color: var(--accent-blue);
-            border-color: var(--accent-blue);
-        }
+        .subtask-item.done .subtask-checkbox { background-color: var(--accent-blue); border-color: var(--accent-blue); }
 
         .error-card {
             background-color: rgba(255, 45, 85, 0.15);
@@ -254,34 +188,31 @@
     const eventId = urlParams.get('id');
 
     function initPortal() {
-        if (eventId) {
-            fetchLiveEventData(eventId);
-            // Auto-refresh every 3 seconds
-            setInterval(() => fetchLiveEventData(eventId), 3000);
+        if (!eventId) {
+            showError("Invalid Link", "No Event ID specified in URL.");
             return;
         }
-        showError("Invalid Link", "No Event ID specified in URL.");
+        
+        fetchLiveEventData(eventId);
+        setInterval(() => fetchLiveEventData(eventId), 3000);
     }
 
     function fetchLiveEventData(id) {
-        const safeId = id.toLowerCase();
-        const timestamp = new Date().getTime();
-        
-        // Cache-busted raw contents URL
-        const rawUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/data/${safeId}.json?cb=${timestamp}`;
+        const safeId = id.toLowerCase().trim();
+        const timestamp = Date.now();
+        const rawUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/data/${safeId}.json?t=${timestamp}`;
 
         fetch(rawUrl, { cache: "no-store" })
             .then(res => {
-                if (!res.ok) throw new Error("File not found on GitHub");
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: File 'data/${safeId}.json' not found on GitHub repository.`);
+                }
                 return res.json();
             })
             .then(data => renderPortal(data))
             .catch(err => {
-                console.warn("Polling for event JSON...", err);
-                // Only show error if no content has been rendered yet
-                if (document.getElementById('clientName').innerText === "Loading Event...") {
-                    showError("Sync Pending", `Event data for '${safeId}' is syncing or does not exist on GitHub yet.`);
-                }
+                console.error("Portal Fetch Error:", err);
+                showError("Sync Pending", `Unable to load data for ID '${safeId}'. Ensure the file exists at 'data/${safeId}.json' on GitHub.`);
             });
     }
 
