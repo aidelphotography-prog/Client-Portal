@@ -218,20 +218,18 @@
     function initPortal() {
         if (eventId) {
             fetchLiveEventData(eventId);
-            // Poll for updates every 5 seconds
             setInterval(() => fetchLiveEventData(eventId), 5000);
             return;
         }
-        showError("Invalid Link", "No event ID specified in the URL.");
+        showError("Invalid Link", "No Event ID found in URL.");
     }
 
     function fetchLiveEventData(id) {
-        // Fetch directly from your repository's data/ folder
         const rawUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/data/${id}.json?t=${Date.now()}`;
 
         fetch(rawUrl, { cache: "no-store" })
             .then(res => {
-                if (!res.ok) throw new Error("JSON file not found in repo");
+                if (!res.ok) throw new Error("JSON file not found");
                 return res.json();
             })
             .then(data => renderPortal(data))
@@ -240,9 +238,6 @@
                 showError("Sync Pending", `Event data for '${id}' is syncing or does not exist yet.`);
             });
     }
-
-    initPortal();
-</script>
 
     function renderPortal(data) {
         document.getElementById('clientName').innerText = data.clientName || data.name || "Client Event";
