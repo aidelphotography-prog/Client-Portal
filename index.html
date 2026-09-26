@@ -256,8 +256,8 @@
     function initPortal() {
         if (eventId) {
             fetchLiveEventData(eventId);
-            // Poll for updates every 2 seconds for instant sync
-            setInterval(() => fetchLiveEventData(eventId), 2000);
+            // Auto-refresh every 3 seconds
+            setInterval(() => fetchLiveEventData(eventId), 3000);
             return;
         }
         showError("Invalid Link", "No Event ID specified in URL.");
@@ -265,19 +265,24 @@
 
     function fetchLiveEventData(id) {
         const safeId = id.toLowerCase();
-        // Calling GitHub API directly completely bypasses CDN caching!
-        const apiURL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/data/${safeId}.json?t=${Date.now()}`;
+        const timestamp = new Date().getTime();
+        
+        // Cache-busted raw contents URL
+        const rawUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/data/${safeId}.json?cb=${timestamp}`;
 
-        fetch(apiURL, {
-            headers: { 'Accept': 'application/vnd.github.v3.raw' },
-            cache: 'no-store'
-        })
-        .then(res => {
-            if (!res.ok) throw new Error("JSON file not found");
-            return res.json();
-        })
-        .then(data => renderPortal(data))
-        .catch(err => console.warn("Sync polling...", err));
+        fetch(rawUrl, { cache: "no-store" })
+            .then(res => {
+                if (!res.ok) throw new Error("File not found on GitHub");
+                return res.json();
+            })
+            .then(data => renderPortal(data))
+            .catch(err => {
+                console.warn("Polling for event JSON...", err);
+                // Only show error if no content has been rendered yet
+                if (document.getElementById('clientName').innerText === "Loading Event...") {
+                    showError("Sync Pending", `Event data for '${safeId}' is syncing or does not exist on GitHub yet.`);
+                }
+            });
     }
 
     function renderPortal(data) {
@@ -286,15 +291,14 @@
         const stages = data.stages || [];
         const totalStages = stages.length || 8;
 
-        // Ensure 1-based indexing for stage number
         let currentIdx = data.currentStageIndex ?? data.currentStage ?? 1;
         if (currentIdx < 1) currentIdx = 1;
 
-        // Compute percentage: (currentStage / total) * 100
         const computedPercent = Math.round((currentIdx / totalStages) * 100);
+        const displayPercent = data.progressPercent !== undefined ? data.progressPercent : computedPercent;
         
-        document.getElementById('progressPercent').innerText = `${computedPercent}%`;
-        document.getElementById('progressCircle').style.setProperty('--percent', computedPercent);
+        document.getElementById('progressPercent').innerText = `${displayPercent}%`;
+        document.getElementById('progressCircle').style.setProperty('--percent', displayPercent);
 
         document.getElementById('stageSubtitle').innerText = `Stage ${currentIdx} of ${totalStages}`;
 
@@ -304,7 +308,6 @@
             document.getElementById('stageTitle').innerText = activeStage.name || "Current Stage";
             document.getElementById('stageNotes').innerText = activeStage.notes || "No notes for this stage.";
 
-            // Render Sub-Tasks
             const subtasksContainer = document.getElementById('subtasksList');
             if (activeStage.subtasks && activeStage.subtasks.length > 0) {
                 subtasksContainer.innerHTML = activeStage.subtasks.map(item => {
@@ -321,7 +324,6 @@
                 subtasksContainer.innerHTML = `<span style="color:var(--text-secondary)">No sub-tasks yet for this stage.</span>`;
             }
 
-            // Render Stepper Circles
             const stepperContainer = document.getElementById('stepperContainer');
             stepperContainer.innerHTML = '';
             stages.forEach((stage, idx) => {
