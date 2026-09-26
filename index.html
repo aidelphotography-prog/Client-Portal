@@ -226,20 +226,17 @@
     }
 
     function fetchLiveEventData(id) {
-        // Direct call to Raw GitHub user content bypassing build caches
-        const rawUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/data/${id}.json?nocache=${Date.now()}`;
+    // Adding a timestamp parameter + cache header forces GitHub to deliver the absolute newest JSON instantly
+    const rawUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/data/${id}.json?t=${new Date().getTime()}`;
 
-        fetch(rawUrl)
-            .then(res => {
-                if (!res.ok) throw new Error("Event JSON not uploaded yet");
-                return res.json();
-            })
-            .then(data => renderPortal(data))
-            .catch(err => {
-                console.warn(err);
-                showError("Sync Pending", `Event data for '${id}' is syncing or does not exist yet.`);
-            });
-    }
+    fetch(rawUrl, { cache: "no-store" })
+        .then(res => {
+            if (!res.ok) throw new Error("Event JSON not updated yet");
+            return res.json();
+        })
+        .then(data => renderPortal(data))
+        .catch(err => console.warn("Sync check:", err));
+}
 
     function renderPortal(data) {
         document.getElementById('clientName').innerText = data.clientName || data.name || "Client Event";
