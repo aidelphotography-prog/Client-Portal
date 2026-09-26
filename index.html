@@ -256,35 +256,28 @@
     function initPortal() {
         if (eventId) {
             fetchLiveEventData(eventId);
-            setInterval(() => fetchLiveEventData(eventId), 3000);
+            // Poll for updates every 2 seconds for instant sync
+            setInterval(() => fetchLiveEventData(eventId), 2000);
             return;
         }
         showError("Invalid Link", "No Event ID specified in URL.");
     }
 
     function fetchLiveEventData(id) {
-        const timestamp = new Date().getTime();
-        // Try exact ID first, then fallback to lowercase ID
-        const rawUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/data/${id}.json?cb=${timestamp}`;
+        const safeId = id.toLowerCase();
+        // Calling GitHub API directly completely bypasses CDN caching!
+        const apiURL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/data/${safeId}.json?t=${Date.now()}`;
 
-        fetch(rawUrl, { cache: "no-store" })
-            .then(res => {
-                if (!res.ok) {
-                    // Try lowercase ID fallback
-                    const lowerUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/data/${id.toLowerCase()}.json?cb=${timestamp}`;
-                    return fetch(lowerUrl, { cache: "no-store" });
-                }
-                return res;
-            })
-            .then(res => {
-                if (!res.ok) throw new Error("JSON file not found");
-                return res.json();
-            })
-            .then(data => renderPortal(data))
-            .catch(err => {
-                console.warn("Polling for event data...", err);
-                showError("Sync Pending", `Event data for '${id}' is syncing or does not exist on GitHub yet.`);
-            });
+        fetch(apiURL, {
+            headers: { 'Accept': 'application/vnd.github.v3.raw' },
+            cache: 'no-store'
+        })
+        .then(res => {
+            if (!res.ok) throw new Error("JSON file not found");
+            return res.json();
+        })
+        .then(data => renderPortal(data))
+        .catch(err => console.warn("Sync polling...", err));
     }
 
     function renderPortal(data) {
@@ -293,14 +286,15 @@
         const stages = data.stages || [];
         const totalStages = stages.length || 8;
 
+        // Ensure 1-based indexing for stage number
         let currentIdx = data.currentStageIndex ?? data.currentStage ?? 1;
         if (currentIdx < 1) currentIdx = 1;
 
+        // Compute percentage: (currentStage / total) * 100
         const computedPercent = Math.round((currentIdx / totalStages) * 100);
-        const displayPercent = data.progressPercent !== undefined ? data.progressPercent : computedPercent;
         
-        document.getElementById('progressPercent').innerText = `${displayPercent}%`;
-        document.getElementById('progressCircle').style.setProperty('--percent', displayPercent);
+        document.getElementById('progressPercent').innerText = `${computedPercent}%`;
+        document.getElementById('progressCircle').style.setProperty('--percent', computedPercent);
 
         document.getElementById('stageSubtitle').innerText = `Stage ${currentIdx} of ${totalStages}`;
 
@@ -310,6 +304,7 @@
             document.getElementById('stageTitle').innerText = activeStage.name || "Current Stage";
             document.getElementById('stageNotes').innerText = activeStage.notes || "No notes for this stage.";
 
+            // Render Sub-Tasks
             const subtasksContainer = document.getElementById('subtasksList');
             if (activeStage.subtasks && activeStage.subtasks.length > 0) {
                 subtasksContainer.innerHTML = activeStage.subtasks.map(item => {
@@ -326,6 +321,7 @@
                 subtasksContainer.innerHTML = `<span style="color:var(--text-secondary)">No sub-tasks yet for this stage.</span>`;
             }
 
+            // Render Stepper Circles
             const stepperContainer = document.getElementById('stepperContainer');
             stepperContainer.innerHTML = '';
             stages.forEach((stage, idx) => {
