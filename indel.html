@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Live Tracking</title>
+<!--
+  GitHub Pages portal for the Client Progress Updates app.
+
+  Serve this file from the root of the portal repository (the same repo the
+  app writes `data/{event_id}.json` into). Open any event with:
+
+      https://<owner>.github.io/<repo>/?data=<base64-payload>
+
+  or the published-file form:
+
+      https://<owner>.github.io/<repo>/?id=<event_id>
+
+  (legacy `?token=` links are still accepted for the older Firestore-era
+  payload format). The page avoids inline data interpolation entirely: every
+  value from the JSON payload is rendered with textContent, so a poisoned
+  payload can never inject HTML or script into the page.
+-->
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --card: #ffffff;
+    --border: #e4e4e7;
+    --text: #18181b;
+    --muted: #71717a;
+    --accent: #ec4899;      /* pink — matches the app brand */
+    --accent-soft: #fce7f3;
+    --ok: #22c55e;
+    --warn: #f59e0b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f0f11;
+      --card: #1f1f23;
+      --border: #2a2a2e;
+      --text: #f4f4f5;
+      --accent-soft: rgba(236, 72, 153, 0.14);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+  .page { width: 100%; max-width: 560px; }
+  .meta { margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px 10px;
+  }
+  .badge.live::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ok);
+  }
+  .badge.payment { color: var(--text); background: var(--card); }
+  h1 { font-size: 24px; line-height: 1.25; margin: 0 0 8px; }
+  .event-date { margin: 0 0 24px; font-size: 13px; color: var(--muted); }
+  h2 { font-size: 15px; margin: 0 0 12px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+  }
+  .card + .card { margin-top: 16px; }
+  .stage-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  #stageLabel {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  #stageName { font-size: 16px; font-weight: 600; text-align: right; }
+  .track {
+    height: 10px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    overflow: hidden;
+  }
+  .track-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    background: var(--accent);
+    transition: width 0.6s ease;
+  }
+  #progressText {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .stage-block { padding: 4px 0; }
+  .stage-block + .stage-block { border-top: 1px solid var(--border); }
+  .stage-block.current { padding: 8px 12px; margin: 4px -12px; border-radius: 10px; background: var(--accent-soft); }
+  .stage-block.current + .stage-block { border-top: 1px solid var(--border); }
+  .stage-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 0;
+  }
+  .stage-name { font-size: 15px; font-weight: 600; }
+  .pill {
+    flex: none;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    color: var(--muted);
+    background: rgba(113, 113, 122, 0.12);
+  }
+  .pill.completed { color: var(--ok); background: rgba(34, 197, 94, 0.12); }
+  .pill.in_progress { color: var(--warn); background: rgba(245, 158, 11, 0.12); }
+  .notes { margin: 0 0 8px; font-size: 13px; color: var(--muted); line-height: 1.45; }
+  ul.checklist {
+    list-style: none;
+    margin: 0 0 4px;
+    padding: 0;
+  }
+  ul.checklist li {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 6px 0;
+    font-size: 14px;
+  }
+  ul.checklist li + li { border-top: 1px solid var(--border); }
+  .tick {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: transparent;
+    align-self: center;
+  }
+  .tick.done { background: var(--ok); border-color: var(--ok); color: #fff; }
+  li.checked span.task { color: var(--muted); text-decoration: line-through; }
+  .empty, .error {
+    margin: 24px 0;
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+  <main class="page">
+    <div class="meta">
+      <span class="badge live">Live tracking</span>
+      <span class="badge payment" id="paymentBadge" hidden></span>
+    </div>
+    <h1 id="eventTitle" aria-live="polite">Loading…</h1>
+    <p class="event-date" id="eventDate" hidden></p>
+
+    <section class="card" aria-label="Event progress">
+      <div class="stage-row">
+        <span id="stageLabel">Stage —</span>
+        <span id="stageName">—</span>
+      </div>
+      <div class="track" role="progressbar"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressTrack">
+        <div class="track-fill" id="progressFill"></div>
+      </div>
+      <div id="progressText" aria-hidden="true">Loading…</div>
+    </section>
+
+    <section class="card" aria-label="Workflow stages">
+      <h2>Progress</h2>
+      <div id="stages"></div>
+    </section>
+  </main>
+
+<script>
+(function () {
+  "use strict";
+
+  var PERMITTED_STATUSES = ["pending", "in_progress", "completed"];
+  var STATUS_LABELS = { pending: "Pending", in_progress: "In progress", completed: "Complete" };
+
+  function el(id) { return document.getElementById(id); }
+
+  function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
+
+  function statusLabel(status) {
+    var key = String(status || "").toLowerCase();
+    if (STATUS_LABELS.hasOwnProperty(key)) { return STATUS_LABELS[key]; }
+    if (key === "done" || key === "complete" || key === "completed") { return "Complete"; }
+    if (key === "active" || key === "in_progress") { return "In progress"; }
+    if (key === "todo" || key === "pending") { return "Pending"; }
+    return String(status || "Pending");
+  }
+
+  function fillProgressBar(percent) {
+    var fill = el("progressFill");
+    var track = el("progressTrack");
+    fill.style.width = clamp(percent, 0, 100) + "%";
+    if (track) { track.setAttribute("aria-valuenow", String(clamp(percent, 0, 100))); }
+  }
+
+  // Renders one checklist row. Uses DOM APIs + textContent only, so payload
+  // strings are never treated as markup.
+  function renderTask(task) {
+    // Embedded (`?data=`) payloads ship sub-tasks as plain titles; the
+    // published (`?id=`) payloads ship { title, isCompleted } objects.
+    if (typeof task === "string") { task = { title: task, isCompleted: false }; }
+    var li = document.createElement("li");
+    if (task.isCompleted) { li.className = "checked"; }
+
+    var tick = document.createElement("span");
+    tick.className = "tick" + (task.isCompleted ? " done" : "");
+    tick.textContent = task.isCompleted ? "\u2713" : "";
+
+    var label = document.createElement("span");
+    label.className = "task";
+    label.textContent = String(task.title || "Untitled task");
+
+    li.appendChild(tick);
+    li.appendChild(label);
+    return li;
+  }
+
+  // Renders the EventPortalData shape: one block per stage with a status
+  // pill, notes and its own sub-task checklist.
+  function renderStages(stages, currentIndex) {
+    var container = el("stages");
+    container.textContent = "";
+    if (!Array.isArray(stages) || stages.length === 0) {
+      var empty = document.createElement("p");
+      empty.className = "empty";
+      empty.textContent = "No workflow stages shared yet.";
+      container.appendChild(empty);
+      return;
+    }
+
+    stages.forEach(function (stage, index) {
+      var block = document.createElement("div");
+      block.className = "stage-block" + (index === currentIndex ? " current" : "");
+
+      var head = document.createElement("div");
+      head.className = "stage-head";
+
+      var name = document.createElement("span");
+      name.className = "stage-name";
+      name.textContent = String(stage.name || "Untitled stage");
+
+      var pill = document.createElement("span");
+      pill.className = "pill " + (PERMITTED_STATUSES.indexOf(stage.status) !== -1 ? stage.status : "");
+      pill.textContent = statusLabel(stage.status);
+
+      head.appendChild(name);
+      head.appendChild(pill);
+      block.appendChild(head);
+
+      if (stage.notes && String(stage.notes).trim()) {
+        var notes = document.createElement("p");
+        notes.className = "notes";
+        notes.textContent = String(stage.notes);
+        block.appendChild(notes);
+      }
+
+      var tasks = Array.isArray(stage.subtasks) ? stage.subtasks : [];
+      if (tasks.length > 0) {
+        var ul = document.createElement("ul");
+        ul.className = "checklist";
+        tasks.forEach(function (task) { ul.appendChild(renderTask(task)); });
+        block.appendChild(ul);
+      }
+
+      container.appendChild(block);
+    });
+  }
+
+  // Renders the legacy flat payload (eventTitle / totalStages /
+  // currentStageName / subTasks) for older links that still point at it.
+  function renderLegacy(data) {
+    var currentIndex = clamp(parseInt(data.currentStageIndex, 10) || 0, 0, data.totalStages - 1);
+    var percent = data.totalStages > 0
+      ? Math.round(((currentIndex + 1) / data.totalStages) * 100)
+      : 0;
+    el("stageLabel").textContent = "Stage " + (currentIndex + 1) + " of " + data.totalStages;
+    el("stageName").textContent = String(data.currentStageName || "—");
+    fillProgressBar(percent);
+    el("progressText").textContent = "Stage " + (currentIndex + 1) + " of " + data.totalStages +
+      " · " + String(data.currentStageName || "—") + " · " + percent + "% complete";
+
+    var container = el("stages");
+    container.textContent = "";
+    var tasks = Array.isArray(data.subTasks) ? data.subTasks : [];
+    if (tasks.length === 0) {
+      var empty = document.createElement("p");
+      empty.className = "empty";
+      empty.textContent = "No sub-tasks for this event yet.";
+      container.appendChild(empty);
+      return;
+    }
+    var ul = document.createElement("ul");
+    ul.className = "checklist";
+    tasks.forEach(function (task) { ul.appendChild(renderTask(task)); });
+    container.appendChild(ul);
+  }
+
+  function render(data, oneBasedStageIndex) {
+    if (!data) {
+      showError("Invalid event payload received.");
+      return;
+    }
+
+    el("eventTitle").textContent = String(data.clientName || data.eventTitle || "Untitled event");
+
+    var date = data.date;
+    if (date) {
+      var parsed = new Date(date);
+      var label = isNaN(parsed.getTime()) ? String(date) : parsed.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+      el("eventDate").textContent = label;
+      el("eventDate").hidden = false;
+    }
+
+    var payment = data.paymentStatus;
+    if (payment && String(payment).trim()) {
+      el("paymentBadge").textContent = String(payment);
+      el("paymentBadge").hidden = false;
+    }
+
+    if (Array.isArray(data.stages) && data.stages.length > 0) {
+      var total = data.stages.length;
+      // Embedded `?data=` payloads number stages from 1; published `?id=`
+      // JSON files are still 0-based. Normalize both to a 0-based lookup.
+      var parsed = parseInt(data.currentStageIndex, 10);
+      var stageIndex = isNaN(parsed) ? 0 : parsed - (oneBasedStageIndex ? 1 : 0);
+      var currentIndex = clamp(stageIndex, 0, total - 1);
+      var current = data.stages[currentIndex];
+
+      el("stageLabel").textContent = "Stage " + (currentIndex + 1) + " of " + total;
+      el("stageName").textContent = String((current && current.name) || "—");
+
+      var percent = typeof data.progressPercent === "number"
+        ? Math.round(data.progressPercent)
+        : Math.round(((currentIndex + 1) / total) * 100);
+      fillProgressBar(percent);
+      el("progressText").textContent = "Stage " + (currentIndex + 1) + " of " + total +
+        " · " + String((current && current.name) || "—") + " · " + clamp(percent, 0, 100) + "% complete";
+
+      renderStages(data.stages, currentIndex);
+      return;
+    }
+
+    if (Array.isArray(data.subTasks)) {
+      renderLegacy(data);
+      return;
+    }
+
+    // Fallback if data.stages is empty or absent
+    fillProgressBar(0);
+    el("stageLabel").textContent = "Stage —";
+    el("stageName").textContent = "—";
+    el("progressText").textContent = "No progress stages recorded yet.";
+    renderStages(data.stages || [], 0);
+  }
+
+  function showError(message) {
+    el("eventTitle").textContent = "Tracking link unavailable";
+    var container = el("stages");
+    container.textContent = "";
+    var li = document.createElement("p");
+    li.className = "empty";
+    li.textContent = message;
+    container.appendChild(li);
+    fillProgressBar(0);
+    el("stageLabel").textContent = "Stage —";
+    el("stageName").textContent = "—";
+    el("progressText").textContent = "0% complete";
+  }
+
+  // `?data=` links carry the whole payload in the URL (URL-safe Base64).
+  // Restore the standard alphabet and padding, then decode to JSON.
+  function decodeEmbeddedData(value) {
+    var b64 = String(value).replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4 !== 0) { b64 += "="; }
+    try { return JSON.parse(atob(b64)); } catch (e) { return null; }
+  }
+
+  var params = new URLSearchParams(window.location.search);
+
+  // Embedded links render straight away; no fetch or published file required.
+  var embedded = params.get("data") ? decodeEmbeddedData(params.get("data")) : null;
+  if (embedded) {
+    render(embedded, true);
+    return;
+  }
+
+  var rawId = params.get("id") || params.get("token");
+  if (!rawId) {
+    showError("This link is missing its tracking id. Share the link again from the studio's app.");
+    return;
+  }
+
+  // Always lower-case the ID to ensure exact match with `data/{shortEventID}.json`
+  var id = String(rawId).trim().toLowerCase();
+
+  // The id is a short event id whose JSON lives at ./data/{id}.json in this
+  // repo, published directly by the studio app via the GitHub Contents API.
+  function loadPublishedFile(eventId) {
+    return fetch("./data/" + encodeURIComponent(eventId) + ".json", { cache: "no-cache" })
+      .then(function (response) {
+        if (!response.ok) { throw new Error("HTTP " + response.status + " - Event file not found on server."); }
+        return response.json();
+      })
+      .then(function (publishedData) { render(publishedData, false); });
+  }
+
+  loadPublishedFile(id).catch(function (err) {
+    showError("No progress published yet. Once the studio shares this link, the current stage, sub-tasks and gallery updates appear here automatically. (" + (err && err.message ? err.message : "File not found") + ")");
+  });
+})();
+</script>
+</body>
+</html>
