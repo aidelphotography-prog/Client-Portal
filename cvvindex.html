@@ -412,10 +412,23 @@
 
   // `?data=` links carry the whole payload in the URL (URL-safe Base64).
   // Restore the standard alphabet and padding, then decode to JSON.
+  // The decoded payload is validated to reject `__proto__` keys and other
+  // potentially dangerous property names before rendering.
   function decodeEmbeddedData(value) {
     var b64 = String(value).replace(/-/g, "+").replace(/_/g, "/");
     while (b64.length % 4 !== 0) { b64 += "="; }
-    try { return JSON.parse(atob(b64)); } catch (e) { return null; }
+    try {
+      var parsed = JSON.parse(atob(b64));
+      if (parsed && typeof parsed === "object") {
+        // Reject payloads with __proto__ or constructor keys that could
+        // be used for prototype pollution or other attacks.
+        var dangerous = ["__proto__", "constructor", "prototype"];
+        for (var i = 0; i < dangerous.length; i++) {
+          if (parsed.hasOwnProperty(dangerous[i])) { return null; }
+        }
+      }
+      return parsed;
+    } catch (e) { return null; }
   }
 
   var params = new URLSearchParams(window.location.search);
@@ -436,20 +449,88 @@
   // Always lower-case the ID to ensure exact match with `data/{shortEventID}.json`
   var id = String(rawId).trim().toLowerCase();
 
-  // The id is a short event id whose JSON lives at ./data/{id}.json in this
-  // repo, published directly by the studio app via the GitHub Contents API.
+  // How often to re-read the published file while the tab is visible. The
+  // payload is a small static JSON served from this same origin, so a poll
+  // costs one conditional GET — no API token, no rate limit — and it keeps
+  // the "Live tracking" badge honest between manual refreshes.
+  var POLL_INTERVAL_MS = 15000;
+  var pollTimer = null;
+
+  // Directory that contains this page. Resolving `data/` from here rather than
+  // from a bare "./" means a link pasted without its trailing slash
+  // ("/Client-Portal?id=x" instead of "/Client-Portal/?id=x") still finds the
+  // portal's own data folder instead of resolving against the domain root.
+  function portalDirectory() {
+    return window.location.pathname.replace(/[^/]*$/, "");
+  }
+
+  function dataUrl(eventId) {
+    return portalDirectory() + "data/" + encodeURIComponent(eventId) + ".json";
+  }
+
+  // Signature of the last payload we drew. An unchanged poll must not rebuild
+  // the DOM, which would reset scroll position and drop focus mid-read.
+  // Seeded with "" so it can never collide with a real JSON.stringify result.
+  var lastSignature = "";
+  var hasRenderedOnce = false;
+
+  // The id is a short event id whose JSON lives at `data/{id}.json` beside this
+  // page, published directly by the studio app via the GitHub Contents API.
+  // Same-origin, so this also works for a private Pages site.
   function loadPublishedFile(eventId) {
-    return fetch("./data/" + encodeURIComponent(eventId) + ".json", { cache: "no-cache" })
+    return fetch(dataUrl(eventId), { cache: "no-cache" })
       .then(function (response) {
         if (!response.ok) { throw new Error("HTTP " + response.status + " - Event file not found on server."); }
         return response.json();
       })
-      .then(function (publishedData) { render(publishedData, false); });
+      .then(function (publishedData) {
+        var signature = JSON.stringify(publishedData);
+        if (signature === lastSignature) { return; }
+        lastSignature = signature;
+        hasRenderedOnce = true;
+        render(publishedData, false);
+      });
   }
 
-  loadPublishedFile(id).catch(function (err) {
-    showError("No progress published yet. Once the studio shares this link, the current stage, sub-tasks and gallery updates appear here automatically. (" + (err && err.message ? err.message : "File not found") + ")");
+  function poll(eventId) {
+    loadPublishedFile(eventId).catch(function (err) {
+      // Only take over the page if nothing has ever loaded. A transient network
+      // blip must not wipe content the client is already reading.
+      if (!hasRenderedOnce) {
+        showError("No progress published yet. Once the studio shares this link, the current stage, sub-tasks and gallery updates appear here automatically. (" + (err && err.message ? err.message : "File not found") + ")");
+      } else {
+        console.warn("[portal] refresh failed, keeping last known state:", err);
+      }
+    });
+  }
+
+  function scheduleNextPoll(eventId) {
+    window.clearTimeout(pollTimer);
+    pollTimer = window.setTimeout(function () {
+      poll(eventId);
+      scheduleNextPoll(eventId);
+    }, POLL_INTERVAL_MS);
+  }
+
+  function startPolling(eventId) {
+    if (document.hidden) { return; }
+    scheduleNextPoll(eventId);
+  }
+
+  // Stop asking while the tab is in the background, and catch up the moment the
+  // client comes back to it.
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) {
+      window.clearTimeout(pollTimer);
+      pollTimer = null;
+    } else if (pollTimer === null) {
+      poll(id);
+      startPolling(id);
+    }
   });
+
+  poll(id);
+  startPolling(id);
 })();
 </script>
 </body>
